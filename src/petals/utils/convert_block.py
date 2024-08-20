@@ -120,14 +120,16 @@ def make_tensor_parallel(
 ) -> nn.Module:
     if model_config.model_type == "bloom":
         tp_config = get_bloom_config(model_config, devices)
-        del tp_config.state_rules[re.compile(".*word_embeddings.weight$")]
+        key_to_remove = re.compile(".*word_embeddings.weight$")
+        if key_to_remove in tp_config.state_rules:
+            del tp_config.state_rules[key_to_remove]
     elif model_config.model_type == "llama":
         tp_config = get_llama_config(model_config, devices)
     else:
         if len(devices) > 1:
             logger.warning("Tensor parallelism is not tested for models other than BLOOM yet, proceed with caution")
         tp_config = None
-    tp_block = tp.TensorParallel(block, devices, config=tp_config, output_device=output_device, delay_init=True)
+    tp_block = tp.TensorParallel(block, devices, tensor_parallel_config=tp_config, output_device=output_device, delay_init=True)
     total_heads = 0
     for tp_shard in tp_block.module_shards:
         for submodule in tp_shard.modules():
