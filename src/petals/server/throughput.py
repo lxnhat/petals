@@ -201,29 +201,29 @@ def measure_compute_rps(
     device = torch.device(device)
     if not tensor_parallel_devices:
         tensor_parallel_devices = (device,)
-    with torch.inference_mode():
-        block = get_model_block(config)
-        block = block.to(dtype)
-        block = convert_block(block, 0, config, tensor_parallel_devices, device, quant_type=quant_type, freeze=True)
+    block = get_model_block(config)
+    block = block.to(dtype)
+    block = convert_block(block, 0, config, tensor_parallel_devices, device, quant_type=quant_type, freeze=True)
 
-        cache = (DUMMY_KEY_PAST.to(dtype=dtype, device=device), DUMMY_KEY_PAST.to(dtype=dtype, device=device))
-        elapsed = 0
-        dummy_input = torch.randn(1, n_tokens, config.hidden_size, device=device, dtype=dtype)
+    cache = (DUMMY_KEY_PAST.to(dtype=dtype, device=device), DUMMY_KEY_PAST.to(dtype=dtype, device=device))
+    elapsed = 0
+    dummy_input = torch.randn(1, n_tokens, config.hidden_size, device=device, dtype=dtype)
 
-        # Skip the 1st step to exclude the initialization time
-        def step(cache_):
-            outputs = block.forward(dummy_input, use_cache=inference, layer_past=cache_ if inference else None)
-            return outputs[1] if inference else None
+    # Skip the 1st step to exclude the initialization time
+    def step(cache_):
+        dummy_input.requires_grad_(True)
+        outputs = block.forward(dummy_input, use_cache=inference, layer_past=cache_ if inference else None)
+        return outputs[1] if inference else None
 
+    cache = step(cache)
+    synchronize(device)
+
+    start_time = time.perf_counter()
+    for _ in range(n_steps):
         cache = step(cache)
-        synchronize(device)
-
-        start_time = time.perf_counter()
-        for _ in range(n_steps):
-            cache = step(cache)
-        synchronize(device)
-        elapsed = time.perf_counter() - start_time
-        device_rps = n_steps * n_tokens / elapsed
+    synchronize(device)
+    elapsed = time.perf_counter() - start_time
+    device_rps = n_steps * n_tokens / elapsed
 
     devices_repr = get_device_name(device)
     if len(tensor_parallel_devices) > 1:
