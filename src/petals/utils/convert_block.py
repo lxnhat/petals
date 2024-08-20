@@ -9,7 +9,7 @@ import tensor_parallel as tp
 import torch
 import torch.nn as nn
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
-from tensor_parallel.slicing_configs import get_bloom_config
+from tensor_parallel.slicing_configs import get_bloom_config, get_llama_config
 from transformers import PretrainedConfig
 
 use_hivemind_log_handler("in_root_logger")
@@ -121,6 +121,8 @@ def make_tensor_parallel(
     if model_config.model_type == "bloom":
         tp_config = get_bloom_config(model_config, devices)
         del tp_config.state_rules[re.compile(".*word_embeddings.weight$")]
+    elif model_config.model_type == "llama":
+        tp_config = get_llama_config(model_config, devices)
     else:
         if len(devices) > 1:
             logger.warning("Tensor parallelism is not tested for models other than BLOOM yet, proceed with caution")
